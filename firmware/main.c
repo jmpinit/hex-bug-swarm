@@ -1,6 +1,11 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
+#define CMD_LEFT_FORWARD    0b00011
+#define CMD_LEFT_BACKWARD   0b10001
+#define CMD_RIGHT_FORWARD   0b00101
+#define CMD_RIGHT_BACKWARD  0b01001
+
 inline void ir_on() {
   TCCR1B |= 1 << CS10;
 }
@@ -9,8 +14,9 @@ inline void ir_off() {
   TCCR1B &= ~(1 << CS10);
 }
 
-void forward_left() {
-  // long pulse
+// 6 bits of data
+void send_command(uint8_t data) {
+  // Start pulse (long)
 
   ir_on();
   _delay_ms(2);
@@ -18,24 +24,20 @@ void forward_left() {
   ir_off();
   _delay_us(400);
 
-  // med pulses
+  for (int i = 0; i < 8; i++) {
+    if (data & (1 << i)) {
+      ir_on();
+      _delay_us(1200);
 
-  for (int i = 0; i < 2; i++) {
-    ir_on();
-    _delay_us(1200);
+      ir_off();
+      _delay_us(400);
+    } else {
+      ir_on();
+      _delay_us(400);
 
-    ir_off();
-    _delay_us(400);
-  }
-
-  // short pulses
-
-  for (int i = 0; i < 4; i++) {
-    ir_on();
-    _delay_us(400);
-
-    ir_off();
-    _delay_us(400);
+      ir_off();
+      _delay_us(400);
+    }
   }
 
   ir_on();
@@ -56,7 +58,13 @@ int main() {
     _delay_ms(500);
     PORTB &= ~(1 << PB1);
     _delay_ms(500);*/
-    //forward_left();
+    send_command(CMD_LEFT_FORWARD);
+    _delay_ms(1000);
+    send_command(CMD_LEFT_BACKWARD);
+    _delay_ms(1000);
+    send_command(CMD_RIGHT_FORWARD);
+    _delay_ms(1000);
+    send_command(CMD_RIGHT_BACKWARD);
     _delay_ms(1000);
   }
 
