@@ -1,6 +1,31 @@
 ;#include "tn10def.inc"
 #include "m328Pdef.inc"
 
+.define PIN_RX PD2
+
+.define PULSE_LONG  (0x1F-1)
+.define PULSE_MED   (0x11-1)
+.define PULSE_SHORT (0x06-1)
+
+.define PACKET_BIT_COUNT 6
+
+.macro measure_pulse
+  lds   r16, TCNT1L
+  lds   r17, TCNT1H
+time_pulse_start_wait_%:
+  sbis  PIND, PIN_RX
+  rjmp time_pulse_start_wait_%
+
+  ; Calculate pulse length
+
+  lds   r18, TCNT1L
+  lds   r19, TCNT1H
+
+  ; r18:r19 is pulse length in clock1 ticks
+  sub   r18, r16
+  sbc   r19, r17
+.endm
+
 .cseg
 .org 0
   rjmp  reset
@@ -28,8 +53,6 @@ delay_fast:
   brne  delay_fast
   ret
 
-
-
 ; Receive IR packet
 ir_interrupt:
   cli
@@ -38,25 +61,61 @@ ir_interrupt:
   push  r17
   push  r18
   push  r19
+  push  r20
+  push  r21
 
 time_pulse:
-  ; 1.193ms is a long pulse
-  lds   r16, TCNT1L
-  lds   r17, TCNT1H
-time_pulse_wait:
-  sbis  PIND, PD2
-  rjmp time_pulse_wait
+  ; Measures length of first pulse
+  ; and skip if it is not a (long) start pulse
+  ; 1.193ms (0x1F timer diff) is a long pulse
 
-  lds   r18, TCNT1L
-  lds   r19, TCNT1H
+  measure_pulse
 
-  sub   r18, r16
-  sbc   r19, r17
+  ; Exit interrupt if this is not a long pulse
+
+  ldi   r16, low(PULSE_LONG)
+  ldi   r17, high(PULSE_LONG)
+
+  cp r18, r16
+  cpc r19, r17
+  brlt ir_interrupt_done
+
+  ; It's a start pulse!
 ir_interrupt_start:
-  mov   r16, r18
+  clr   r20 ; For the received bits
+  ldi   r21, PACKET_BIT_COUNT
+ir_interrupt_read_bit:
+  sbic  PIND, PIN_RX
+  rjmp  ir_interrupt_read_bit
+
+  measure_pulse
+
+  ldi   r16, low(PULSE_MED)
+  ldi   r17, high(PULSE_MED)
+
+  cp r18, r16
+  cpc r19, r17
+  brlt ir_interrupt_read_bit_0
+
+ir_interrupt_read_bit_1:
+  sec
+  rjmp  ir_interrupt_read_finish
+ir_interrupt_read_bit_0:
+  clc
+ir_interrupt_read_finish:
+  rol   r20 ; Shift received bit in
+
+  dec   r21
+  brne  ir_interrupt_read_bit
+
+  ; We are done reading the packet! Received value in r20
+
+  mov   r16, r20
   rcall uart_tx
 ir_interrupt_done:
 
+  pop   r21
+  pop   r20
   pop   r19
   pop   r18
   pop   r17
