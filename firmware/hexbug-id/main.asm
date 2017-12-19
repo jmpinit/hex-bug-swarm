@@ -1,13 +1,15 @@
 ;#include "tn10def.inc"
 #include "m328Pdef.inc"
 
+.define MY_ID 0x15
+
 .define PIN_RX PD2
 
 .define PULSE_LONG  (0x1F-1)
 .define PULSE_MED   (0x11-1)
 .define PULSE_SHORT (0x06-1)
 
-.define PACKET_BIT_COUNT 6
+.define PACKET_BIT_COUNT 8
 
 .macro measure_pulse
   lds   r16, TCNT1L
@@ -103,15 +105,31 @@ ir_interrupt_read_bit_1:
 ir_interrupt_read_bit_0:
   clc
 ir_interrupt_read_finish:
-  rol   r20 ; Shift received bit in
+  ror   r20 ; Shift received bit in
 
   dec   r21
   brne  ir_interrupt_read_bit
 
   ; We are done reading the packet! Received value in r20
 
-  mov   r16, r20
+  ; Does the ID match?
+  andi  r20, 0x1F ; Mask the ID (lower 5 bits)
+  cpi   r20, MY_ID
+  brne  ir_interrupt_done
+
+  ldi   r16, 'i'
   rcall uart_tx
+  ldi   r16, 't'
+  rcall uart_tx
+  ldi   r16, ' '
+  rcall uart_tx
+  ldi   r16, 'm'
+  rcall uart_tx
+  ldi   r16, 'e'
+  rcall uart_tx
+  ldi   r16, 10
+  rcall uart_tx
+
 ir_interrupt_done:
 
   pop   r21
@@ -129,6 +147,10 @@ ir_interrupt_done:
 reset:
   sbi   DDRB, PB5
 
+  ; Setup Z for buffering received data
+  ldi   ZL, low(SRAM_START)
+  ldi   ZH, high(SRAM_START)
+
   ; INT0 triggered on falling edge
   ldi   r16, 1 << ISC01
   sts   EICRA, r16
@@ -145,15 +167,5 @@ reset:
 
   rcall uart_init
 loop:
-  cbi   PORTB, PB5
-
-  ldi   r16, 64 
-	rcall delay
-
-  sbi   PORTB, PB5
-
-  ldi   r16, 64
-	rcall delay
-
   rjmp	loop
 
