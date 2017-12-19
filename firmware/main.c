@@ -1,17 +1,23 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
-#define CMD_LEFT_FORWARD    0b00011
-#define CMD_LEFT_BACKWARD   0b10001
-#define CMD_RIGHT_FORWARD   0b00101
-#define CMD_RIGHT_BACKWARD  0b01001
+#define CMD_STOP            0b000001
+#define CMD_FORWARD         0b000111
+#define CMD_BACKWARD        0b011001
+#define CMD_LEFT_FORWARD    0b000011
+#define CMD_LEFT_BACKWARD   0b010001
+#define CMD_RIGHT_FORWARD   0b000101
+#define CMD_RIGHT_BACKWARD  0b001001
 
 inline void ir_on() {
+  TCCR1A = 1 << COM1A0; // toggle OCR1A on compare match
   TCCR1B |= 1 << CS10;
 }
 
 inline void ir_off() {
+  TCCR1A &= ~(1 << COM1A0);
   TCCR1B &= ~(1 << CS10);
+  PORTB &= ~(1 << PB1);
 }
 
 // 6 bits of data
@@ -46,6 +52,29 @@ void send_command(uint8_t data) {
   ir_off();
 }
 
+void uart_init() {
+  // Set TX to be output
+  DDRD |= 1 << PD1;
+
+  UBRR0 = 3; // Set 250k baud
+
+  // Enable TX and RX
+  UCSR0B |= (1 << TXEN0) | (1 << RXEN0);
+
+  // 8 bit
+  UCSR0C = (1 << UCSZ00) | (1 << UCSZ01);
+}
+
+char uart_read() {
+  while (!(UCSR0A & (1 << RXC0))) {}
+	return UDR0;
+}
+
+void uart_write(char c) {
+  while (!(UCSR0A & (1 << UDRE0)));
+	UDR0 = c;
+}
+
 int main() {
   TCCR1A = (1 << COM1A0); // toggle OCR1A on compare match
   TCCR1B = (1 << WGM12) | (1 << CS10);
@@ -53,19 +82,32 @@ int main() {
 
   DDRB |= 1 << PB1;
 
+  uart_init();
+
   for (;;) {
-    /*PORTB |= 1 << PB1;
-    _delay_ms(500);
-    PORTB &= ~(1 << PB1);
-    _delay_ms(500);*/
-    send_command(CMD_LEFT_FORWARD);
-    _delay_ms(1000);
-    send_command(CMD_LEFT_BACKWARD);
-    _delay_ms(1000);
-    send_command(CMD_RIGHT_FORWARD);
-    _delay_ms(1000);
-    send_command(CMD_RIGHT_BACKWARD);
-    _delay_ms(1000);
+    switch (uart_read()) {
+      case 'w':
+        send_command(CMD_FORWARD);
+        break;
+      case 's':
+        send_command(CMD_BACKWARD);
+        break;
+      case 'q':
+        send_command(CMD_LEFT_FORWARD);
+        break;
+      case 'a':
+        send_command(CMD_LEFT_BACKWARD);
+        break;
+      case 'e':
+        send_command(CMD_RIGHT_FORWARD);
+        break;
+      case 'd':
+        send_command(CMD_RIGHT_BACKWARD);
+        break;
+      default:
+        send_command(CMD_STOP);
+        break;
+    }
   }
 
   return 0;
