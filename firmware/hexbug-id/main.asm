@@ -28,18 +28,36 @@ delay_fast:
   brne  delay_fast
   ret
 
+
+
 ; Receive IR packet
 ir_interrupt:
   cli
 
-  push   r16
-  push   r17
-  push   r18
+  push  r16
+  push  r17
+  push  r18
+  push  r19
 
-  ldi   r16, 'i'
+time_pulse:
+  ; 1.193ms is a long pulse
+  lds   r16, TCNT1L
+  lds   r17, TCNT1H
+time_pulse_wait:
+  sbis  PIND, PD2
+  rjmp time_pulse_wait
+
+  lds   r18, TCNT1L
+  lds   r19, TCNT1H
+
+  sub   r18, r16
+  sbc   r19, r17
+ir_interrupt_start:
+  mov   r16, r18
   rcall uart_tx
-  ;sbi   PIND, PD1
+ir_interrupt_done:
 
+  pop   r19
   pop   r18
   pop   r17
   pop   r16
@@ -59,6 +77,10 @@ reset:
   ; Enable INT0
   ldi   r16, 1 << INT0
   out   EIMSK, r16
+
+  ; Enable TIMER1 with 1024 divider (15625/s at 16MHz)
+  ldi   r16, 0x5
+  sts   TCCR1B, r16
 
   sei
 
