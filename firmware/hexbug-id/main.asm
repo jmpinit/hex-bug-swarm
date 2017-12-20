@@ -11,6 +11,11 @@
 
 .define PACKET_BIT_COUNT 8
 
+.define CMD_STOP          0
+.define CMD_FORWARD_LEFT  1
+.define CMD_FORWARD_RIGHT 2
+.define CMD_REVERSE_LEFT  3
+
 .macro measure_pulse
   lds   r16, TCNT1L
   lds   r17, TCNT1H
@@ -26,6 +31,30 @@ time_pulse_start_wait_%:
   ; r18:r19 is pulse length in clock1 ticks
   sub   r18, r16
   sbc   r19, r17
+.endm
+
+.macro bug_stop
+  cbi   DDRD, PD3
+  cbi   PORTD, PD3
+
+  cbi   DDRD, PD4
+  cbi   PORTD, PD4
+
+  cbi   DDRD, PD5
+  cbi   PORTD, PD5
+.endm
+
+.macro bug_forward_left
+  sbi   PORTD, PD3
+.endm
+
+.macro bug_forward_right
+  sbi   PORTD, PD4
+.endm
+
+.macro bug_reverse_left
+  cbi   PORTD, PD3
+  sbi   PORTD, PD5
 .endm
 
 .cseg
@@ -110,25 +139,41 @@ ir_interrupt_read_finish:
   dec   r21
   brne  ir_interrupt_read_bit
 
-  ; We are done reading the packet! Received value in r20
+  ; We are done reading the packet! Received value in r21
+  mov   r21, r20
 
   ; Does the ID match?
   andi  r20, 0x1F ; Mask the ID (lower 5 bits)
   cpi   r20, MY_ID
   brne  ir_interrupt_done
 
-  ldi   r16, 'i'
-  rcall uart_tx
-  ldi   r16, 't'
-  rcall uart_tx
-  ldi   r16, ' '
-  rcall uart_tx
-  ldi   r16, 'm'
-  rcall uart_tx
-  ldi   r16, 'e'
-  rcall uart_tx
-  ldi   r16, 10
-  rcall uart_tx
+  mov   r20, r21
+  andi  r20, 0xE0 ; Mask the command (upper 3 bits)
+  cpi   r20, CMD_STOP << 5
+  brne  ir_interrupt_check_fwd_l
+  
+  bug_stop
+
+  rjmp ir_interrupt_done
+ir_interrupt_check_fwd_l:
+  cpi   r20, CMD_FORWARD_LEFT << 5
+  brne ir_interrupt_check_fwd_r
+
+  bug_forward_left
+
+  rjmp ir_interrupt_done
+ir_interrupt_check_fwd_r:
+  cpi   r20, CMD_FORWARD_RIGHT << 5
+  brne ir_interrupt_check_rev_l
+
+  bug_forward_right
+
+  rjmp ir_interrupt_done
+ir_interrupt_check_rev_l:
+  cpi   r20, CMD_REVERSE_LEFT << 5
+  brne ir_interrupt_done
+
+  bug_reverse_left
 
 ir_interrupt_done:
 
