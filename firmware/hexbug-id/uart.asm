@@ -1,8 +1,4 @@
-.define PORT_TX PORTD
-.define DDR_TX DDRD
-.define PIN_TX PD1
-
-.define UART_WAIT 41
+;.define UART_WAIT 41 ; 115200 at 16 MHz
 
 uart_init:
   ; Make TX pin output & set it high
