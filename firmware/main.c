@@ -20,7 +20,7 @@ inline void ir_off() {
   PORTB &= ~(1 << PB1);
 }
 
-// 6 bits of data
+// 8 bits of data
 void send_command(uint8_t data) {
   // Start pulse (long)
 
@@ -85,29 +85,9 @@ int main() {
   uart_init();
 
   for (;;) {
-    switch (uart_read()) {
-      case 'w':
-        send_command(CMD_FORWARD);
-        break;
-      case 's':
-        send_command(CMD_BACKWARD);
-        break;
-      case 'q':
-        send_command(CMD_LEFT_FORWARD);
-        break;
-      case 'a':
-        send_command(CMD_LEFT_BACKWARD);
-        break;
-      case 'e':
-        send_command(CMD_RIGHT_FORWARD);
-        break;
-      case 'd':
-        send_command(CMD_RIGHT_BACKWARD);
-        break;
-      default:
-        send_command(CMD_STOP);
-        break;
-    }
+    uint8_t c = uart_read();
+    send_command(c);
+    uart_write(c);
   }
 
   return 0;
