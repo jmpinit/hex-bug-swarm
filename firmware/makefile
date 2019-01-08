@@ -11,10 +11,10 @@ $(FIRMWARE_NAME).obj: main.c
 	avr-gcc $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 flash: firmware.hex
-	avrdude -c usbtiny -p atmega328pb -U flash:w:$<
+	avrdude -c usbtiny -p atmega328p -U flash:w:$<
 
 fuses:
-	avrdude -c usbtiny -p atmega328pb -U lfuse:w:0xde:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
+	avrdude -c usbtiny -p atmega328p -U lfuse:w:0xde:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
 
 .PHONY: flash, fuses
 

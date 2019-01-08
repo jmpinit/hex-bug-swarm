@@ -1,13 +1,14 @@
 #include "tn10def.inc"
 #include "attiny10-pins.inc"
 
-.define MY_ID 0x01
+.define MY_ID 24
 
+;.define DEBUG_PRINT_CMD 1
 ;.define DEBUG_PRINT_PULSE_LEN 1
 ;.define DEBUG_PRINT_PACKETS 1
 ;.define DEBUG_PRINT_ID_MISMATCH 1
 
-.define PULSE_LONG  (0x1F-4)
+.define PULSE_LONG  (0x1F-5)
 .define PULSE_MED   (0x08)
 ;.define PULSE_SHORT (0x06-1)
 
@@ -36,17 +37,13 @@ time_pulse_start_wait_%:
 .endm
 
 .macro bug_stop
-  cbi   DDR_MOTOR, PIN_FWD_L
   cbi   PORT_MOTOR, PIN_FWD_L
-
-  cbi   DDR_MOTOR, PIN_FWD_R
   cbi   PORT_MOTOR, PIN_FWD_R
-
-  cbi   DDR_MOTOR, PIN_REV_L
   cbi   PORT_MOTOR, PIN_REV_L
 .endm
 
 .macro bug_forward_left
+  cbi   PORT_MOTOR, PIN_REV_L
   sbi   PORT_MOTOR, PIN_FWD_L
 .endm
 
@@ -159,36 +156,48 @@ ir_interrupt_read_finish:
   cpi   r20, CMD_STOP << 5
   brne  ir_interrupt_check_fwd_l
   
-  ;bug_stop
+.ifdef  DEBUG_PRINT_CMD
   ldi   r16, 's'
   rcall uart_tx
+.else
+  bug_stop
+.endif
 
   rjmp ir_interrupt_done
 ir_interrupt_check_fwd_l:
   cpi   r20, CMD_FORWARD_LEFT << 5
   brne ir_interrupt_check_fwd_r
 
-  ;bug_forward_left
+.ifdef  DEBUG_PRINT_CMD
   ldi   r16, 'l'
   rcall uart_tx
+.else
+  bug_forward_left
+.endif
 
   rjmp ir_interrupt_done
 ir_interrupt_check_fwd_r:
   cpi   r20, CMD_FORWARD_RIGHT << 5
   brne ir_interrupt_check_rev_l
 
-  ;bug_forward_right
+.ifdef DEBUG_PRINT_CMD
   ldi   r16, 'r'
   rcall uart_tx
+.else
+  bug_forward_right
+.endif
 
   rjmp ir_interrupt_done
 ir_interrupt_check_rev_l:
   cpi   r20, CMD_REVERSE_LEFT << 5
   brne ir_interrupt_done
 
-  ;bug_reverse_left
+.ifdef DEBUG_PRINT_CMD
   ldi   r16, 'b'
   rcall uart_tx
+.else
+  bug_reverse_left
+.endif
 
   rjmp  ir_interrupt_done
 
@@ -209,6 +218,11 @@ ir_interrupt_done:
 
 ; Execution starts here
 reset:
+  ; Set outputs for controlling motors
+  sbi   DDR_MOTOR, PIN_REV_L
+  sbi   DDR_MOTOR, PIN_FWD_L
+  sbi   DDR_MOTOR, PIN_FWD_R
+
   ; Enable TIMER0 with 64 divider (15625/s at 1MHz)
   ldi   r16, 0x3
   out   TCCR0B, r16

@@ -1,9 +1,17 @@
-;#include "tn10def.inc"
+.define MY_ID 0x01
+.define PLATFORM_ATTINY10 1
+
+.ifdef PLATFORM_ATTINY10
+#include "tn10def.inc"
+#include "attiny10-pins.inc"
+.define TIMERVAL_L TCNT0L
+.define TIMERVAL_H TCNT0H
+.elseif
 #include "m328Pdef.inc"
-
-.define MY_ID 0x15
-
-.define PIN_RX PD2
+#include "atmega328p-pins.inc"
+.define TIMERVAL_L TCNT1L
+.define TIMERVAL_H TCNT1H
+.endif
 
 .define PULSE_LONG  (0x1F-1)
 .define PULSE_MED   (0x11-1)
@@ -17,16 +25,26 @@
 .define CMD_REVERSE_LEFT  3
 
 .macro measure_pulse
+.ifdef PLATFORM_ATTINY10
+  in    r16, TCNT0L
+  in    r17, TCNT0H
+.else
   lds   r16, TCNT1L
   lds   r17, TCNT1H
+.endif
 time_pulse_start_wait_%:
-  sbis  PIND, PIN_RX
+  sbis  PINPORT_RX, PIN_RX
   rjmp time_pulse_start_wait_%
 
   ; Calculate pulse length
 
+.ifdef PLATFORM_ATTINY10
+  in    r18, TCNT0L
+  in    r19, TCNT0H
+.else
   lds   r18, TCNT1L
   lds   r19, TCNT1H
+.endif
 
   ; r18:r19 is pulse length in clock1 ticks
   sub   r18, r16
@@ -34,27 +52,27 @@ time_pulse_start_wait_%:
 .endm
 
 .macro bug_stop
-  cbi   DDRD, PD3
-  cbi   PORTD, PD3
+  cbi   DDR_MOTOR, PIN_FWD_L
+  cbi   PORT_MOTOR, PIN_FWD_L
 
-  cbi   DDRD, PD4
-  cbi   PORTD, PD4
+  cbi   DDR_MOTOR, PIN_FWD_R
+  cbi   PORT_MOTOR, PIN_FWD_R
 
-  cbi   DDRD, PD5
-  cbi   PORTD, PD5
+  cbi   DDR_MOTOR, PIN_REV_L
+  cbi   PORT_MOTOR, PIN_REV_L
 .endm
 
 .macro bug_forward_left
-  sbi   PORTD, PD3
+  sbi   PORT_MOTOR, PIN_FWD_L
 .endm
 
 .macro bug_forward_right
-  sbi   PORTD, PD4
+  sbi   PORT_MOTOR, PIN_FWD_R
 .endm
 
 .macro bug_reverse_left
-  cbi   PORTD, PD3
-  sbi   PORTD, PD5
+  cbi   PORT_MOTOR, PIN_FWD_L
+  sbi   PORT_MOTOR, PIN_REV_L
 .endm
 
 .cseg
@@ -63,7 +81,9 @@ time_pulse_start_wait_%:
 .org INT0addr
   rjmp  ir_interrupt
 
-#include "uart.asm"
+.ifndef PLATFORM_ATTINY10
+;#include "uart.asm"
+.endif
 
 delay:
     clr             r0
@@ -85,15 +105,10 @@ delay_fast:
   ret
 
 ; Receive IR packet
+; NOTE: This code assumes everything happens in the interrupt handler below
+; so register state is not saved (also 'cause ATTiny10s don't have the push instruction)
 ir_interrupt:
   cli
-
-  push  r16
-  push  r17
-  push  r18
-  push  r19
-  push  r20
-  push  r21
 
 time_pulse:
   ; Measures length of first pulse
@@ -116,7 +131,7 @@ ir_interrupt_start:
   clr   r20 ; For the received bits
   ldi   r21, PACKET_BIT_COUNT
 ir_interrupt_read_bit:
-  sbic  PIND, PIN_RX
+  sbic  PINPORT_RX, PIN_RX
   rjmp  ir_interrupt_read_bit
 
   measure_pulse
@@ -177,28 +192,19 @@ ir_interrupt_check_rev_l:
 
 ir_interrupt_done:
 
-  pop   r21
-  pop   r20
-  pop   r19
-  pop   r18
-  pop   r17
-  pop   r16
-
   sei
 
   reti
 
 ; Execution starts here
 reset:
-  sbi   DDRB, PB5
-
-  ; Setup Z for buffering received data
-  ldi   ZL, low(SRAM_START)
-  ldi   ZH, high(SRAM_START)
-
   ; INT0 triggered on falling edge
   ldi   r16, 1 << ISC01
+.ifdef PLATFORM_ATTINY10
+  out   EICRA, r16
+.else
   sts   EICRA, r16
+.endif
 
   ; Enable INT0
   ldi   r16, 1 << INT0
@@ -206,11 +212,17 @@ reset:
 
   ; Enable TIMER1 with 1024 divider (15625/s at 16MHz)
   ldi   r16, 0x5
+.ifdef PLATFORM_ATTINY10
+  out   TCCR0B, r16
+.else
   sts   TCCR1B, r16
+.endif
 
   sei
 
-  rcall uart_init
+.ifndef PLATFORM_ATTINY10
+  ;rcall uart_init
+.endif
 loop:
   rjmp	loop
 

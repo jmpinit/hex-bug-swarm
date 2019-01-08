@@ -56,7 +56,7 @@ void uart_init() {
   // Set TX to be output
   DDRD |= 1 << PD1;
 
-  UBRR0 = 3; // Set 250k baud
+  UBRR0 = 0; // Set 1M baud
 
   // Enable TX and RX
   UCSR0B |= (1 << TXEN0) | (1 << RXEN0);
